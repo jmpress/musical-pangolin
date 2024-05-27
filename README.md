@@ -1,0 +1,2 @@
+So I was late to the party to participate in the Cyberpet contest for Cyberdeck Cafe's Virtcon '24, but I've always loved tamagotchis, etc, and still wanted to make one. A lot of the specifics involved here are new to me, so this should be a fun learning project.
+I'm attempting to use the contest-specified hardware (Heltec wifi lora 32 v3) to create a virtual pet with interesting features, including some basic musical abilities. I intend to write the code for this in CircuitPython using the image that was created by @edward as the basis for that.
