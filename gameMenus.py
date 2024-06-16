@@ -2,9 +2,9 @@ from MenuItem import MenuItem
 
 #Define menus as list of menu items
 main_menu = [  #does this even need to be a menu? The selections don't do anything.
-    MenuItem('HUNGER', x_padding = 3, y_padding = 6),
+    MenuItem(' FOOD ', x_padding = 3, y_padding = 6),
+    MenuItem('HEALTH', x_padding = 3, y_padding = 6),
     MenuItem('ENERGY', x_padding = 3, y_padding = 6),
-    MenuItem(' MOOD ', x_padding = 3, y_padding = 6),
     MenuItem('  XP  ', x_padding = 3, y_padding = 6)
 ]
 
