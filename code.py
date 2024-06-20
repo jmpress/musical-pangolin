@@ -427,7 +427,7 @@ while True:
                 bar_group.hidden = True
                 game_state["current_selection"] = care_menu[0]
                 game_state["current_selection"].selected = True
-                screen_switch_sound()
+                #screen_switch_sound()
                 update_menu()
             elif game_state["current_screen"] == care_menu:
                 pass
