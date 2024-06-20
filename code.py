@@ -1,3 +1,4 @@
+import os
 import board
 import math
 import displayio
@@ -5,6 +6,17 @@ import rotaryio
 import digitalio
 import time
 import random
+
+import audiocore
+import busio
+import audiobusio
+import audiomixer
+import sdcardio
+import storage
+import synthio
+import ulab.numpy as np
+import pangolinScales as pango
+import dUtils
 
 from adafruit_bitmap_font import bitmap_font
 from adafruit_display_text import label
@@ -20,8 +32,30 @@ font = bitmap_font.load_font('/font/Hyperlight.bdf')
 color = 0xFFFFFF
 bg_color = 0x000000
 
-# TODO load these in from save game state?
+##SPI pin definition for microSD card reader module
+card_cs = board.GPIO26
+MOSI = board.GPIO33
+MISO = board.GPIO34
+SCK = board.GPIO3
+#initialize spi bus
+spi = busio.SPI(SCK, MOSI, MISO)
+
+#initialize storage
+try:
+    sdcard = sdcardio.SDCard(spi, card_cs)
+    vfs = storage.VfsFat(sdcard)
+    storage.mount(vfs, "/sd")
+    print("Mounted SD card")
+    
+    ###read in save game file here, if exists
+    
+except OSError as error:
+    print(error)
+
+# TODO load these in from save game state, these can be default values if there is no saved game
 # max values are likely to stay constant however should still be accessible in the same scope as the current values, so if this gets changed into a game state object, include the max values.
+#initialize pet-specific variables
+user_scale = pango.generate_personal_scale()
 game_state = {
     "current_food" : 100,
     "max_food" : 100,
@@ -40,12 +74,7 @@ game_state = {
     "poop": False,
 }
 
-#TODO: spend time separating state changes from the screen refresh. screen refresh should be its own function that's called as part of the event loop, likely on each tick.
-
-#TODO: replace meters with progressbar library
-
 #define and initialize screen groups here, append such into root and see how goes
-#this requires some massive changes. Lets start with defining a game state object and what displayIO groups go in there too
 splash = displayio.Group()
 menu_init = displayio.Group()       #dummy group to pop later
 bar_init = displayio.Group()
@@ -66,6 +95,11 @@ display.root_group = splash
 
 tick_speed = 60000000000
 
+##i2s pins for amp to drive speaker audio
+DATA = board.GPIO47
+LRCLK = board.GPIO48
+BCLK = board.GPIO2
+
 ## Rotary Encoder pin assignments
 ENCA = board.GPIO38
 ENCB = board.GPIO39
@@ -76,6 +110,9 @@ SW3 = board.GPIO45
 SW4 = board.GPIO46
 SW5 = board.GPIO5
 COMB = board.GPIO4
+
+#initialize i2s bus
+i2s = audiobusio.I2SOut(BCLK, LRCLK, DATA)
 
 #initialize rotary encoder
 encoder = rotaryio.IncrementalEncoder(ENCA, ENCB,2)
@@ -92,6 +129,19 @@ for button_pin in button_pins:
     pin = digitalio.DigitalInOut(button_pin)
     pin.switch_to_input(digitalio.Pull.UP)
     buttons.append(pin)
+
+#initialize synthesizer
+sample_rate = 44100
+SAMPLE_SIZE = 512 # one full period of waveform?
+SAMPLE_VOLUME = 32000 #defines amplitude of wave form generation
+half_period = SAMPLE_SIZE // 2
+synth = synthio.Synthesizer(sample_rate=sample_rate) #CD quality sample rate, in theory
+
+#initialize audio mixer
+mixer = audiomixer.Mixer(sample_rate=sample_rate, buffer_size=2048, channel_count=1)
+i2s.play(mixer)
+mixer.voice[0].play(synth)
+mixer.voice[0].level = 0.25
     
 switched = False
 last_switch = -1
@@ -255,6 +305,58 @@ def poop():
     game_state["poop"] = True
     # add poop stink overlay art
 
+def test_synth():    
+    note1=synthio.Note(frequency=pango.note_fq[user_scale[0]][4], waveform=pango.wave_square, envelope=pango.pluck_env, filter = pango.lpf1)
+    note2=synthio.Note(frequency=pango.note_fq[user_scale[2]][4], waveform=pango.wave_square, envelope=pango.pluck_env, filter = pango.lpf2)
+    note3=synthio.Note(frequency=pango.note_fq[user_scale[4]][3], waveform=pango.wave_square, envelope=pango.pad_env, filter = pango.lpf1)
+    
+    synth.press(note1)
+    time.sleep(pango.note_length_s[2])
+    synth.release(note1)
+    synth.press(note2)
+    time.sleep(pango.note_length_s[2])
+    synth.release(note2)
+    synth.press(note3)
+    time.sleep(pango.note_length_s[4])
+    synth.release(note3)
+
+def menu_click_sound():
+    click=synthio.Note(frequency=pango.note_fq[user_scale[0]][7], waveform=pango.wave_square, envelope=pango.click_env, filter = pango.lpf1)
+    synth.press(click)
+
+def screen_switch_sound():
+    num_steps = 50
+    initial_frequency = 880  # Start at a higher frequency
+    final_frequency = 220    # End at a lower frequency
+    step_duration = pango.note_length_s[4] / num_steps
+    for i in range(num_steps):
+        # Calculate the current frequency
+        frequency = initial_frequency - (initial_frequency - final_frequency) * (i / num_steps)
+        envelope = synthio.Envelope(attack_time=0.01, decay_time=0.1, sustain_level=0.5, release_time=0.1)
+        note = synthio.Note(frequency = frequency, waveform = pango.wave_square, envelope = envelope, filter = pango.lpf1)
+        synth.press(note)
+        time.sleep(step_duration)
+        synth.release(note)
+        time.sleep(step_duration)
+
+def rando_note():
+    octaves = [3,4,5]
+    return synthio.Note(frequency=pango.note_fq[dUtils.ranDex(user_scale)][dUtils.ranDex(octaves)], waveform=pango.wave_square, envelope=pango.pluck_env, filter = pango.lpf1)
+    
+def rando_length():
+    return dUtils.ranDex(pango.note_length_s)
+
+def rando_choon():
+    choon_length = 4 #number of notes
+    choon = []
+    for i in range(choon_length):
+        choon.append({"note": rando_note(), "time": pango.note_length_s[2]})
+        
+    for j in range(choon_length):
+        synth.press(choon[j]["note"])
+        time.sleep(choon[j]["time"])
+        synth.release(choon[j]["note"])
+
 update_menu()
 update_bars()
 
@@ -274,6 +376,7 @@ while True:
             game_state["current_selection"].selected = False
             game_state["current_selection"] = game_state["current_selection"].next
             game_state["current_selection"].selected = True
+            menu_click_sound()
             update_menu()
             last_position = position
         
@@ -283,6 +386,7 @@ while True:
             game_state["current_selection"] = game_state["current_selection"].prev
             game_state["current_selection"].selected = True
             update_menu()
+            menu_click_sound()
             last_position = position
         
     if not buttons[0].value:
@@ -292,6 +396,7 @@ while True:
 
             if game_state["current_selection"] == care_menu[0]:
                 feed()
+                rando_choon()
             elif game_state["current_selection"] == care_menu[1]:
                 treat()
             elif game_state["current_selection"] == care_menu[2]:
@@ -303,7 +408,12 @@ while True:
         if switched == False:
             switched = True
             last_switch = now    
-            print("Up Button!")
+            print("Vol+")
+            if mixer.voice[0].level+0.1 > 1.00:
+                mixer.voice[0].level = 1
+            else:
+                mixer.voice[0].level = mixer.voice[0].level + 0.1
+            print(mixer.voice[0].level)
         
     if not buttons[2].value:
        if switched == False:
@@ -317,6 +427,7 @@ while True:
                 bar_group.hidden = True
                 game_state["current_selection"] = care_menu[0]
                 game_state["current_selection"].selected = True
+                screen_switch_sound()
                 update_menu()
             elif game_state["current_screen"] == care_menu:
                 pass
@@ -325,13 +436,19 @@ while True:
                 game_state["current_selection"] = None
                 reset_select_state()
                 update_bars()
+                screen_switch_sound()
                 update_menu()
         
     if not buttons[3].value:
         if switched == False:
             switched = True
             last_switch = now    
-            print("Down Button")
+            print("Vol-")
+            if mixer.voice[0].level-0.1 < 0.00:
+                mixer.voice[0].level = 0
+            else:
+                mixer.voice[0].level = mixer.voice[0].level - 0.1
+            print(mixer.voice[0].level)
 
     if not buttons[4].value:
         if switched == False:
@@ -345,11 +462,13 @@ while True:
                 bar_group.hidden = True
                 game_state["current_selection"] = synth_menu[0]
                 game_state["current_selection"].selected = True
+                screen_switch_sound()
                 update_menu()
             elif game_state["current_screen"] == care_menu:
                 game_state["current_screen"] = main_menu
                 game_state["current_selection"] = None
                 reset_select_state()
+                screen_switch_sound()
                 update_bars()
                 update_menu()
             elif game_state["current_screen"] == synth_menu:

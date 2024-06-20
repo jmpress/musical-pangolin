@@ -32,6 +32,7 @@ half_period = SAMPLE_SIZE // 2
 synth = synthio.Synthesizer(sample_rate=sample_rate) #CD quality sample rate, in theory
 
 #define envelopes (times are in seconds)
+click_env = synthio.Envelope(attack_time = 0.0, decay_time = 0.0, release_time = 0.0, attack_level = 1, sustain_level=0.00)
 pluck_env = synthio.Envelope(attack_time = 0.1, decay_time = 0.1, release_time = 0.1, attack_level = 1, sustain_level=0.00)
 pad_env = synthio.Envelope(attack_time = 1.0, decay_time = 0.1, release_time = 1.0, attack_level = 1, sustain_level=1)
 
