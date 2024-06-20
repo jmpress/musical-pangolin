@@ -436,7 +436,7 @@ while True:
                 game_state["current_selection"] = None
                 reset_select_state()
                 update_bars()
-                screen_switch_sound()
+                #screen_switch_sound()
                 update_menu()
         
     if not buttons[3].value:
@@ -462,13 +462,13 @@ while True:
                 bar_group.hidden = True
                 game_state["current_selection"] = synth_menu[0]
                 game_state["current_selection"].selected = True
-                screen_switch_sound()
+                #screen_switch_sound()
                 update_menu()
             elif game_state["current_screen"] == care_menu:
                 game_state["current_screen"] = main_menu
                 game_state["current_selection"] = None
                 reset_select_state()
-                screen_switch_sound()
+                #screen_switch_sound()
                 update_bars()
                 update_menu()
             elif game_state["current_screen"] == synth_menu:
